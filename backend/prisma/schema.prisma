@@ -1,0 +1,77 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id            String         @id @default(uuid())
+  email         String         @unique
+  name          String
+  password      String?
+  avatarUrl     String?
+  lastSeenAt    DateTime       @default(now())
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  bio           String?
+  phone         String?        @unique
+  isOnline      Boolean        @default(false)    
+
+  chats         Participant[]
+  messages      Message[]
+  @@map("users")
+}
+
+model Chat {
+  id            String         @id @default(uuid())
+  isGroup       Boolean        @default(false)
+  createdAt     DateTime       @default(now())
+  title         String?        
+
+  participants  Participant[]
+  messages      Message[]
+  
+  @@map("chats")
+}
+
+model Participant {
+  id        String   @id @default(uuid())
+  joinedAt  DateTime @default(now())
+  
+
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+  chat      Chat     @relation(fields: [chatId], references: [id])
+  chatId    String
+
+  @@unique([userId, chatId]) 
+  @@map("participants")
+}
+
+model Message {
+  id         String      @id @default(uuid())
+  content    String?     @db.Text
+  msgType    MessageType @default(TEXT)
+  mediaUrl   String?
+  createdAt  DateTime    @default(now())
+
+
+  sender     User        @relation(fields: [senderId], references: [id])
+  senderId   String
+  chat       Chat        @relation(fields: [chatId], references: [id])
+  chatId     String
+
+  @@index([chatId, createdAt]) 
+  @@map("messages")
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  VIDEO
+  FILE
+}
