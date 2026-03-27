@@ -1,6 +1,8 @@
+import { ChatType } from "../../../generated/prisma/enums";
+
 export class ChatResponseDto {
   id: string;
-  isGroup: boolean;
+  type: ChatType;
   title?: string;
   participants: any[];
   lastMessageAt?: Date;

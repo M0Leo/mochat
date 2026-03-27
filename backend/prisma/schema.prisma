@@ -12,6 +12,7 @@ model User {
   id            String         @id @default(uuid())
   email         String         @unique
   username      String         @unique
+  displayName   String
   password      String?
   avatarUrl     String?
   lastSeenAt    DateTime       @default(now())
@@ -28,11 +29,17 @@ model User {
   @@map("users")
 }
 
+enum ChatType {
+  PRIVATE_GROUP
+  PUBLIC_GROUP
+  DIRECT
+}
+
 model Chat {
   id            String         @id @default(uuid())
-  isGroup       Boolean        @default(false)
   createdAt     DateTime       @default(now())
   title         String?        
+  type          ChatType       
   lastMessageAt DateTime?
   
   participants  Participant[]

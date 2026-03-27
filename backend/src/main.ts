@@ -5,12 +5,17 @@ import { APIResponseInterceptor } from './common/interceptors/api-response.inter
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  app.enableCors({
+    origin: process.env.NEXT_APP_URL || 'http://localhost:3001',
+    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+    credentials: true,
+  });
   app.setGlobalPrefix('api');
-  app.useGlobalInterceptors(
-    new APIResponseInterceptor({
-      excludeEndpoints: [],
-    }),
-  );
+  // // app.useGlobalInterceptors(
+  // //   new APIResponseInterceptor({
+  // //     excludeEndpoints: [],
+  // //   }),
+  // );
   app.useGlobalPipes(new ValidationPipe());
   await app.listen(process.env.PORT ?? 3000);
 }

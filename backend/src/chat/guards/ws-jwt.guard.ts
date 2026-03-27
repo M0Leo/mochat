@@ -31,7 +31,6 @@ export class WsJwtGuard implements CanActivate {
       });
 
       client.data.user = payload;
-      console.log(payload)
       return true;
     } catch {
       throw new WsException('Unauthorized access');

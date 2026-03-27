@@ -8,7 +8,7 @@ import { RefreshTokenGuard } from './guards/jwt-refresh-token.guard';
 export class AuthController {
   constructor(private authService: AuthService) {}
 
-  @Post('signup')
+  @Post('register')
   signup(@Body() dto: SignUpDto) {
     return this.authService.signup(dto);
   }

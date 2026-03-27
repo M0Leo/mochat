@@ -11,9 +11,7 @@ import { UsersService } from './users.service';
 import { CurrentUser } from '@/auth/decorators/current-user.decorator';
 import { JWTGuard } from '@/auth/guards/jwt-token.guard';
 import { UserResponseDto } from './dto/userResponse.dto';
-import {
-  plainToClass,
-} from 'class-transformer';
+import { plainToClass } from 'class-transformer';
 
 @Controller('users')
 @UseGuards(JWTGuard)
@@ -29,4 +27,8 @@ export class UsersController {
     return plainToClass(UserResponseDto, user);
   }
 
+  @Get('/friends')
+  async getFriends(@CurrentUser() curr) {
+    return;
+  }
 }

@@ -5,6 +5,7 @@ export class UserResponseDto implements User {
   id: string;
   email: string;
   username: string;
+  displayName: string;
   avatarUrl: string | null;
   lastSeenAt: Date;
   createdAt: Date;

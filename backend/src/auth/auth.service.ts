@@ -5,6 +5,8 @@ import * as argon2 from 'argon2';
 import { UsersService } from '@/users/users.service';
 import { SignInDto } from './dto/sign-in.dto';
 import { SignUpDto } from './dto/sign-up.dto';
+import { plainToInstance } from 'class-transformer';
+import { UserResponseDto } from '@/users/dto/userResponse.dto';
 
 @Injectable()
 export class AuthService {
@@ -26,11 +28,16 @@ export class AuthService {
     const hash = await argon2.hash(dto.password);
 
     const user = await this.usersService.createUser({
-      ...dto,
+      username: dto.username,
+      displayName: dto.displayName,
+      email: dto.email,
       password: hash,
     });
 
-    return this.generateTokens(user.id, user.email);
+    return {
+      tokens: await this.generateTokens(user.id, user.email),
+      user: plainToInstance(UserResponseDto, user),
+    };
   }
 
   async login(dto: SignInDto) {
@@ -42,7 +49,10 @@ export class AuthService {
       throw new UnauthorizedException();
     }
 
-    return this.generateTokens(user.id, user.email);
+    return {
+      tokens: await this.generateTokens(user.id, user.email),
+      user: plainToInstance(UserResponseDto, user),
+    };
   }
 
   async generateTokens(userId: string, email: string) {
