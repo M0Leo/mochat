@@ -6,22 +6,64 @@ import {
 } from '@nestjs/common';
 import { CreateChatDto } from './dto/create-chat.dto';
 import { PrismaService } from '@/prisma.service';
-import { ChatResponseDto } from './dto/chat-response.dto';
-import { plainToInstance } from 'class-transformer';
 import { SendMessageDto } from './dto/send-message.dto';
-import { ChatType } from '../../generated/prisma/browser';
-import { Chat } from '../../generated/prisma/client';
+import { ChatType, MessageType } from '../../generated/prisma/browser';
+
+const CHAT_PARTICIPANT_SELECT = {
+  id: true,
+  username: true,
+  displayName: true,
+  avatarUrl: true,
+  isOnline: true,
+} as const;
+
+const MESSAGE_SENDER_SELECT = {
+  id: true,
+  username: true,
+  displayName: true,
+  avatarUrl: true,
+} as const;
+
+const CHAT_INCLUDE = {
+  participants: {
+    include: {
+      user: {
+        select: CHAT_PARTICIPANT_SELECT,
+      },
+    },
+  },
+} as const;
 
 @Injectable()
 export class ChatService {
   constructor(private prisma: PrismaService) {}
 
+  private toChatResponse(chat: {
+    id: string;
+    type: ChatType;
+    title: string | null;
+    lastMessageAt: Date | null;
+    createdAt: Date;
+    participants: { user: Record<string, unknown> }[];
+  }) {
+    return {
+      id: chat.id,
+      type: chat.type,
+      title: chat.title,
+      lastMessageAt: chat.lastMessageAt,
+      createdAt: chat.createdAt,
+      participants: chat.participants.map((p) => p.user),
+    };
+  }
+
   async createChat(userId: string, dto: CreateChatDto) {
     if (dto.type === ChatType.DIRECT) {
-      return this.createDirectChat(userId, dto.participants);
+      const chat = await this.createDirectChat(userId, dto.participants);
+      return this.toChatResponse(chat);
     }
 
-    return this.createGroupChat(userId, dto);
+    const chat = await this.createGroupChat(userId, dto);
+    return this.toChatResponse(chat);
   }
 
   private async createDirectChat(userId: string, participants: string[] = []) {
@@ -40,9 +82,7 @@ export class ChatService {
           },
         },
       },
-      include: {
-        participants: true,
-      },
+      include: CHAT_INCLUDE,
     });
 
     if (existing && existing.participants.length === 2) {
@@ -56,7 +96,7 @@ export class ChatService {
           create: [{ userId: userA }, { userId: userB }],
         },
       },
-      include: this.defaultInclude(),
+      include: CHAT_INCLUDE,
     });
   }
 
@@ -83,69 +123,42 @@ export class ChatService {
           })),
         },
       },
-      include: this.defaultInclude(),
+      include: CHAT_INCLUDE,
     });
   }
 
-  private defaultInclude() {
-    return {
-      participants: {
-        include: {
-          user: {
-            select: {
-              id: true,
-              username: true,
-              avatarUrl: true,
-            },
-          },
-        },
+  async getDMUsers(userId: string) {
+    const chats = await this.prisma.chat.findMany({
+      where: {
+        type: 'DIRECT',
+        participants: { some: { userId } },
       },
-    };
+      include: CHAT_INCLUDE,
+    });
+
+    const usersMap = new Map<string, (typeof chats)[0]['participants'][0]['user']>();
+
+    for (const chat of chats) {
+      for (const p of chat.participants) {
+        if (p.userId !== userId) {
+          usersMap.set(p.user.id, p.user);
+        }
+      }
+    }
+
+    return Array.from(usersMap.values());
   }
 
   async getUserChats(userId: string) {
     const chats = await this.prisma.chat.findMany({
       where: {
-        participants: {
-          some: { userId },
-        },
+        participants: { some: { userId } },
       },
-      include: {
-        participants: {
-          include: {
-            user: {
-              select: {
-                displayName: true,
-                id: true,
-                isOnline: true,
-              },
-            },
-          },
-        },
-        messages: {
-          take: 1,
-          orderBy: { createdAt: 'desc' },
-        },
-      },
-      orderBy: {
-        lastMessageAt: 'desc',
-      },
+      include: CHAT_INCLUDE,
+      orderBy: { lastMessageAt: { sort: 'desc', nulls: 'last' } },
     });
 
-    //TODO: Turn to optimal response
-    return chats.map((chat: Chat) => this.mapChat(chat, userId));
-  }
-
-  private mapChat(chat: any, currentUserId: string) {
-    const users = chat.participants.map((p) => p.user);
-
-    return {
-      id: chat.id,
-      type: chat.type,
-      title: chat.title,
-      participants: users,
-      createdAt: chat.createdAt,
-    };
+    return chats.map((chat) => this.toChatResponse(chat));
   }
 
   async getMessages(
@@ -154,37 +167,15 @@ export class ChatService {
     cursor?: string,
     limit = 50,
   ) {
-    const participant = await this.prisma.participant.findUnique({
-      where: {
-        userId_chatId: {
-          chatId,
-          userId,
-        },
-      },
-    });
-
-    if (!participant) {
-      throw new ForbiddenException('You are not part of this chat');
-    }
+    await this.assertParticipant(userId, chatId);
 
     const messages = await this.prisma.message.findMany({
       where: { chatId },
-      orderBy: {
-        createdAt: 'asc',
-      },
+      orderBy: { createdAt: 'asc' },
       take: limit + 1,
-      ...(cursor && {
-        skip: 1,
-        cursor: { id: cursor },
-      }),
+      ...(cursor && { skip: 1, cursor: { id: cursor } }),
       include: {
-        sender: {
-          select: {
-            id: true,
-            displayName: true,
-            avatarUrl: true,
-          },
-        },
+        sender: { select: MESSAGE_SENDER_SELECT },
       },
     });
 
@@ -195,71 +186,47 @@ export class ChatService {
       nextCursor = next?.id;
     }
 
-    return {
-      messages,
-      nextCursor,
-    };
+    return { messages, nextCursor };
   }
 
   async getChatById(chatId: string, userId: string) {
-    const chat = this.prisma.chat.findFirst({
+    const chat = await this.prisma.chat.findFirst({
       where: {
         id: chatId,
-        participants: {
-          some: { userId },
-        },
+        participants: { some: { userId } },
       },
       include: {
-        participants: {
-          include: { user: true },
-        },
+        ...CHAT_INCLUDE,
         messages: {
           include: {
-            sender: {
-              select: {
-                id: true,
-                displayName: true,
-                avatarUrl: true,
-              },
-            },
+            sender: { select: MESSAGE_SENDER_SELECT },
           },
         },
       },
     });
 
-    return plainToInstance(ChatResponseDto, chat);
+    if (!chat) return null;
+
+    return {
+      ...this.toChatResponse(chat),
+      messages: chat.messages,
+    };
   }
 
   async findDirectChat(userA: string, userB: string) {
     const chats = await this.prisma.chat.findMany({
       where: {
         type: 'DIRECT',
-        participants: {
-          some: { userId: userA },
-        },
+        participants: { some: { userId: userA } },
         AND: {
-          participants: {
-            some: { userId: userB },
-          },
+          participants: { some: { userId: userB } },
         },
       },
-      include: {
-        participants: true,
-        messages: {
-          include: {
-            sender: {
-              select: {
-                id: true,
-                displayName: true,
-                avatarUrl: true,
-              },
-            },
-          },
-        },
-      },
+      include: CHAT_INCLUDE,
     });
 
-    return chats.find((chat) => chat.participants.length === 2);
+    const chat = chats.find((c) => c.participants.length === 2);
+    return chat ? this.toChatResponse(chat) : null;
   }
 
   async addParticipants(chatId: string, dto: { userIds: string[] }) {
@@ -272,54 +239,75 @@ export class ChatService {
     });
   }
 
-  async sendMessage(senderId: string, chatId: string, dto: SendMessageDto) {
-    const participant = await this.prisma.participant.findUnique({
-      where: {
-        userId_chatId: {
-          chatId,
-          userId: senderId,
-        },
+  private MESSAGE_INCLUDE = {
+    sender: {
+      select: {
+        id: true,
+        username: true,
+        displayName: true,
+        avatarUrl: true,
       },
+    },
+  } as const;
+
+  private async assertParticipant(
+    userId: string,
+    chatId: string,
+  ): Promise<void> {
+    const participant = await this.prisma.participant.findUnique({
+      where: { userId_chatId: { userId, chatId } },
+      select: { userId: true },
     });
-
     if (!participant) {
-      throw new ForbiddenException('You are not part of this chat');
+      throw new ForbiddenException('You are not a participant of this chat');
     }
+  }
 
-    if (!dto.content && !dto.mediaUrl) {
+  private normalizeMessageType(dto: SendMessageDto): MessageType {
+    if (dto.mediaUrl && dto.type === MessageType.TEXT) {
+      return MessageType.FILE;
+    }
+    return dto.type;
+  }
+
+  async sendMessage(
+    senderId: string,
+    chatId: string,
+    dto: SendMessageDto,
+  ) {
+    const content = dto.content?.trim();
+
+    if (!content && !dto.mediaUrl) {
       throw new BadRequestException('Message cannot be empty');
     }
 
-    const message = await this.prisma.message.create({
-      data: {
-        content: dto.content,
-        msgType: dto.type,
-        mediaUrl: dto.mediaUrl,
-        senderId,
-        chatId,
-      },
-      include: {
-        sender: {
-          select: {
-            id: true,
-            displayName: true,
-            avatarUrl: true,
-          },
+    await this.assertParticipant(senderId, chatId);
+
+    const [message] = await this.prisma.$transaction([
+      this.prisma.message.create({
+        data: {
+          content: content || null,
+          msgType: this.normalizeMessageType(dto),
+          mediaUrl: dto.mediaUrl,
+          senderId,
+          chatId,
         },
-      },
-    });
+        include: this.MESSAGE_INCLUDE,
+      }),
+      this.prisma.chat.update({
+        where: { id: chatId },
+        data: { lastMessageAt: new Date() },
+      }),
+    ]);
 
     return message;
   }
 
   async leaveChat(chatId: string, userId: string) {
+    await this.assertParticipant(userId, chatId);
+
     return this.prisma.participant.delete({
-      where: {
-        userId_chatId: {
-          userId,
-          chatId,
-        },
-      },
+      where: { userId_chatId: { userId, chatId } },
     });
   }
 }

@@ -31,7 +31,7 @@ export class ChatController {
   }
 
   @Get(':id')
-  getChat(@Param('id') chatId: string, @CurrentUser('userId') userId: string) {
+  getChat(@Param('id') chatId: string, @CurrentUser('sub') userId: string) {
     return this.chatService.getChatById(chatId, userId);
   }
 
@@ -62,7 +62,7 @@ export class ChatController {
   @Delete(':id/leave')
   leaveChat(
     @Param('id') chatId: string,
-    @CurrentUser('userId') userId: string,
+    @CurrentUser('sub') userId: string,
   ) {
     return this.chatService.leaveChat(chatId, userId);
   }

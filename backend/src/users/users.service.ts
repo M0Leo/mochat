@@ -2,7 +2,6 @@ import { Injectable } from '@nestjs/common';
 import { UserWhereUniqueInput } from '../../generated/prisma/models';
 import { Prisma, User } from '../../generated/prisma/client';
 import { PrismaService } from '../prisma.service';
-
 @Injectable()
 export class UsersService {
   constructor(private prisma: PrismaService) {}
@@ -21,14 +20,41 @@ export class UsersService {
     cursor?: Prisma.UserWhereUniqueInput;
     where?: Prisma.UserWhereInput;
     orderBy?: Prisma.UserOrderByWithRelationInput;
+    select?: Prisma.UserSelect;
   }): Promise<User[]> {
-    const { skip, take, cursor, where, orderBy } = params;
+    const { skip, take, cursor, where, orderBy, select } = params;
     return this.prisma.user.findMany({
       skip,
       take,
       cursor,
       where,
       orderBy,
+      select,
+    });
+  }
+
+  async searchUsers(query: string, userId?: string) {
+    const trimmed = query.trim();
+    if (!trimmed) return [];
+    return this.prisma.user.findMany({
+      where: {
+        AND: [
+          ...(userId ? [{ id: { not: userId } }] : []),
+          {
+            OR: [
+              { username: { startsWith: trimmed, mode: 'insensitive' } },
+              { displayName: { startsWith: trimmed, mode: 'insensitive' } },
+            ],
+          },
+        ],
+      },
+      take: 20,
+      select: {
+        id: true,
+        username: true,
+        displayName: true,
+      },
+      orderBy: { username: 'asc' },
     });
   }
 

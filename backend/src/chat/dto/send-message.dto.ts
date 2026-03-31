@@ -2,6 +2,9 @@ import { IsEnum, IsOptional, IsString } from 'class-validator';
 import { MessageType } from '../../../generated/prisma/enums';
 
 export class SendMessageDto {
+  @IsString()
+  chatId: string;
+
   @IsOptional()
   @IsString()
   content?: string;
