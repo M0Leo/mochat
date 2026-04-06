@@ -91,4 +91,18 @@ export class ChatController {
   leaveChat(@Param('id') chatId: string, @CurrentUser('sub') userId: string) {
     return this.chatService.leaveChat(chatId, userId);
   }
+
+  @Get('public')
+  @ApiOperation({ summary: 'List public groups not joined' })
+  @ApiOkResponse({ description: 'Array of public groups' })
+  getPublicGroups(@CurrentUser('sub') userId: string) {
+    return this.chatService.getPublicGroups(userId);
+  }
+
+  @Post(':id/join')
+  @ApiOperation({ summary: 'Join a public group' })
+  @ApiCreatedResponse({ description: 'Joined chat object' })
+  joinChat(@Param('id') chatId: string, @CurrentUser('sub') userId: string) {
+    return this.chatService.joinChat(chatId, userId);
+  }
 }

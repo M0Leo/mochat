@@ -310,4 +310,46 @@ export class ChatService {
       where: { userId_chatId: { userId, chatId } },
     });
   }
+
+  async getPublicGroups(excludeUserId: string) {
+    const chats = await this.prisma.chat.findMany({
+      where: {
+        type: 'PUBLIC_GROUP',
+        participants: { none: { userId: excludeUserId } },
+      },
+      include: CHAT_INCLUDE,
+      take: 50,
+      orderBy: { createdAt: 'desc' },
+    });
+    console.log(chats);
+    return chats.map((chat) => this.toChatResponse(chat));
+  }
+
+  async joinChat(chatId: string, userId: string) {
+    const chat = await this.prisma.chat.findUnique({
+      where: { id: chatId },
+      select: { type: true },
+    });
+
+    if (!chat || chat.type !== 'PUBLIC_GROUP') {
+      throw new ForbiddenException('Cannot join this chat');
+    }
+
+    const existing = await this.prisma.participant.findUnique({
+      where: { userId_chatId: { userId, chatId } },
+    });
+
+    if (existing) {
+      return this.getChatById(chatId, userId);
+    }
+
+    const updated = await this.prisma.chat.update({
+      where: { id: chatId },
+      data: {
+        participants: { create: { userId } },
+      },
+      include: CHAT_INCLUDE,
+    });
+    return this.toChatResponse(updated);
+  }
 }
