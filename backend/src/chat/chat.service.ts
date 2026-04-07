@@ -321,7 +321,6 @@ export class ChatService {
       take: 50,
       orderBy: { createdAt: 'desc' },
     });
-    console.log(chats);
     return chats.map((chat) => this.toChatResponse(chat));
   }
 
