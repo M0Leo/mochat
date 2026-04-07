@@ -163,11 +163,12 @@ export default function ChatSidebar() {
                 key={chat.id}
                 onClick={async () => {
                   if (activeChat?.id === chat.id) return;
-                  setActiveChat(chat);
                   const socket = getSocket();
                   if (socket) {
                     socket.emit("join_chat", { chatId: chat.id });
                   }
+                  setActiveChat(chat);
+                  await new Promise((r) => setTimeout(r, 100));
                   try {
                     const { data } = await getMessages(chat.id);
                     useChatStore.getState().setMessages(data.messages);
@@ -283,14 +284,25 @@ export default function ChatSidebar() {
       <NewDirectChat
         open={showNewChat}
         onOpenChange={setShowNewChat}
-        onChatCreated={(raw) => {
+        onChatCreated={async (raw) => {
           const chat = {
             ...raw,
             lastMessageAt: raw.lastMessageAt ?? new Date().toISOString(),
             participants: raw.participants.map((p: any) => p.user ?? p),
           };
           addChat(chat);
+          const socket = getSocket();
+          if (socket) {
+            socket.emit("join_chat", { chatId: chat.id });
+          }
           setActiveChat(chat);
+          await new Promise((r) => setTimeout(r, 100));
+          try {
+            const { data } = await getMessages(chat.id);
+            useChatStore.getState().setMessages(data.messages);
+          } catch (err) {
+            console.error("Failed to load messages:", err);
+          }
           setShowNewChat(false);
         }}
         currentUserId={currentUser?.id || ""}
@@ -300,14 +312,25 @@ export default function ChatSidebar() {
       <NewGroupChat
         open={showNewGroup}
         onOpenChange={setShowNewGroup}
-        onChatCreated={(raw) => {
+        onChatCreated={async (raw) => {
           const chat = {
             ...raw,
             lastMessageAt: raw.lastMessageAt ?? new Date().toISOString(),
             participants: raw.participants.map((p: any) => p.user ?? p),
           };
           addChat(chat);
+          const socket = getSocket();
+          if (socket) {
+            socket.emit("join_chat", { chatId: chat.id });
+          }
           setActiveChat(chat);
+          await new Promise((r) => setTimeout(r, 100));
+          try {
+            const { data } = await getMessages(chat.id);
+            useChatStore.getState().setMessages(data.messages);
+          } catch (err) {
+            console.error("Failed to load messages:", err);
+          }
           setShowNewGroup(false);
         }}
         currentUserId={currentUser?.id || ""}

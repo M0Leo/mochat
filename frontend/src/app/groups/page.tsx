@@ -44,8 +44,6 @@ export default function GroupsPage() {
     }
   };
 
-  console.log(groups)
-
   if (!currentUser) return null;  
 
   return (

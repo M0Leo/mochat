@@ -27,7 +27,9 @@ export default function ChatPage() {
 
         socket.on("new_message", (msg: Message) => {
           const s = useChatStore.getState();
-          s.addMessage(msg);
+          if (s.activeChat?.id === msg.chatId) {
+            s.addMessage(msg);
+          }
           s.updateChatLastMessage(msg.chatId, msg);
         });
 
